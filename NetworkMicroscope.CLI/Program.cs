@@ -83,9 +83,19 @@ class Program
         PrintSectionHeader($"Running TCP Spray (Reliability Test) with {probes} probes...");
         var tester = new TcpSprayTester(target, port);
         
-        // Default: 100ms interval
-        var result = await tester.RunSprayAsync(probes, 100);
+        // Adjust delay for larger sprays to keep runtime reasonable
+        // 100 probes @ 50ms = 5s
+        // 1000 probes @ 10ms = 10s
+        int delay = probes > 200 ? 10 : 50;
+
+        var progress = new Progress<(int completed, int total)>(update => 
+        {
+            DrawProgressBar(update.completed, update.total);
+        });
+
+        var result = await tester.RunSprayAsync(probes, delay, progress);
         
+        Console.WriteLine(); // Move to next line after progress bar completes
         PrintResult("TCP Spray", result.Success, result.Message, 0);
         if (result.Success)
         {
@@ -94,6 +104,18 @@ class Program
             Console.WriteLine($"    Latency (ms): Min={result.MinLatency}, Max={result.MaxLatency}, Avg={result.AvgLatency}");
             Console.WriteLine($"    Jitter: {result.Jitter}ms");
         }
+    }
+
+    static void DrawProgressBar(int completed, int total)
+    {
+        if (total == 0) return;
+        
+        int width = 40;
+        double percent = (double)completed / total;
+        int filled = (int)(percent * width);
+        
+        // \r overwrites the current line
+        Console.Write($"\r    Progress: [{new string('=', filled)}{new string(' ', width - filled)}] {percent:P0} ({completed}/{total})");
     }
 
     static async Task RunConnectivityTests(string target, int port)

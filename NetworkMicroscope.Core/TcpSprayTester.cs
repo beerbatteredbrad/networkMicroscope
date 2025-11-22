@@ -27,7 +27,7 @@ public class TcpSprayTester
         _port = port;
     }
 
-    public async Task<TcpSprayResult> RunSprayAsync(int count = 20, int delayMs = 100)
+    public async Task<TcpSprayResult> RunSprayAsync(int count = 20, int delayMs = 100, IProgress<(int completed, int total)>? progress = null)
     {
         var result = new TcpSprayResult { Sent = count };
         var latencies = new List<double>();
@@ -60,6 +60,8 @@ public class TcpSprayTester
             {
                 // Connection failed (Loss)
             }
+
+            progress?.Report((i + 1, count));
 
             if (i < count - 1) await Task.Delay(delayMs);
         }
