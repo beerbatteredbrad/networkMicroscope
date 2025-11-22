@@ -9,9 +9,17 @@ public class AdvancedNetworkTesterTests
     [Fact]
     public void Top100Ports_ShouldContainCommonPorts()
     {
-        Assert.Contains(80, AdvancedNetworkTester.Top100Ports);
-        Assert.Contains(443, AdvancedNetworkTester.Top100Ports);
-        Assert.Contains(22, AdvancedNetworkTester.Top100Ports);
+        Assert.Contains(20, AdvancedNetworkTester.Top100Ports); // FTP Data
+        Assert.Contains(21, AdvancedNetworkTester.Top100Ports); // FTP Control
+        Assert.Contains(22, AdvancedNetworkTester.Top100Ports); // SSH
+        Assert.Contains(23, AdvancedNetworkTester.Top100Ports); // Telnet
+        Assert.Contains(25, AdvancedNetworkTester.Top100Ports); // SMTP
+        Assert.Contains(53, AdvancedNetworkTester.Top100Ports); // DNS
+        Assert.Contains(80, AdvancedNetworkTester.Top100Ports); // HTTP
+        Assert.Contains(110, AdvancedNetworkTester.Top100Ports); // POP3
+        Assert.Contains(143, AdvancedNetworkTester.Top100Ports); // IMAP
+        Assert.Contains(443, AdvancedNetworkTester.Top100Ports); // HTTPS
+        Assert.Contains(3389, AdvancedNetworkTester.Top100Ports); // RDP
         Assert.True(AdvancedNetworkTester.Top100Ports.Length >= 100);
     }
 

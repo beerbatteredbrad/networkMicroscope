@@ -17,7 +17,7 @@ public class AdvancedNetworkTester
 
     public static readonly int[] Top100Ports = new[] 
     { 
-        7, 9, 13, 21, 22, 23, 25, 26, 37, 53, 79, 80, 81, 88, 106, 110, 111, 113, 119, 135, 139, 143, 144, 179, 199, 389, 427, 443, 444, 445, 465, 513, 514, 515, 543, 544, 548, 554, 587, 631, 646, 873, 990, 993, 995, 1025, 1026, 1027, 1028, 1029, 1110, 1433, 1720, 1723, 1755, 1900, 2000, 2001, 2049, 2121, 2717, 3000, 3128, 3306, 3389, 3986, 4899, 5000, 5009, 5051, 5060, 5101, 5190, 5357, 5432, 5631, 5666, 5800, 5900, 6000, 6001, 6646, 7070, 8000, 8008, 8009, 8080, 8081, 8443, 8888, 9000, 9090, 9100, 9999, 10000, 32768, 49152, 49153, 49154, 49155
+        7, 9, 13, 20, 21, 22, 23, 25, 26, 37, 53, 79, 80, 81, 88, 106, 110, 111, 113, 119, 135, 139, 143, 144, 179, 199, 389, 427, 443, 444, 445, 465, 513, 514, 515, 543, 544, 548, 554, 587, 631, 636, 646, 873, 990, 993, 995, 1025, 1026, 1027, 1028, 1029, 1110, 1433, 1720, 1723, 1755, 1900, 2000, 2001, 2049, 2121, 2717, 3000, 3128, 3306, 3389, 3986, 4899, 5000, 5009, 5051, 5060, 5101, 5190, 5357, 5432, 5631, 5666, 5800, 5900, 6000, 6001, 6646, 7070, 8000, 8008, 8009, 8080, 8081, 8443, 8888, 9000, 9090, 9100, 9999, 10000, 32768, 49152, 49153, 49154, 49155
     };
 
     public async Task<List<string>> RunTracerouteAsync(int maxHops = 30)
@@ -176,28 +176,59 @@ public class AdvancedNetworkTester
     {
         var results = new List<string>();
         var portList = ports.ToList();
-        var tasks = portList.Select(async port =>
+
+        // Resolve IP once to avoid 100 concurrent DNS lookups
+        IPAddress? targetIp = null;
+        if (IPAddress.TryParse(_target, out var ip))
         {
-            using var client = new TcpClient();
+            targetIp = ip;
+        }
+        else
+        {
             try
             {
-                var connectTask = client.ConnectAsync(_target, port);
-                var timeoutTask = Task.Delay(1000); // 1 second timeout per port
+                var ips = await Dns.GetHostAddressesAsync(_target);
+                targetIp = ips.FirstOrDefault();
+            }
+            catch { /* Ignore DNS failure here, individual connects will fail */ }
+        }
+
+        // Use SemaphoreSlim to throttle concurrency (max 25 concurrent connections)
+        using var semaphore = new SemaphoreSlim(25);
+
+        var tasks = portList.Select(async port =>
+        {
+            await semaphore.WaitAsync();
+            try
+            {
+                using var client = new TcpClient();
+                var connectTask = targetIp != null 
+                    ? client.ConnectAsync(targetIp, port) 
+                    : client.ConnectAsync(_target, port); // Fallback if DNS pre-resolve failed
+
+                var timeoutTask = Task.Delay(1500); // Increased timeout to 1.5s
                 
                 var completed = await Task.WhenAny(connectTask, timeoutTask);
                 if (completed == connectTask)
                 {
-                    // Ensure the task completed successfully (didn't fault)
-                    await connectTask; 
-                    if (client.Connected)
+                    try 
                     {
-                        return $"Port {port}: OPEN";
+                        await connectTask; // Propagate exceptions
+                        if (client.Connected)
+                        {
+                            return $"Port {port}: OPEN";
+                        }
                     }
+                    catch { /* Connection failed */ }
                 }
             }
             catch
             {
                 // Ignore errors (Closed/Filtered)
+            }
+            finally
+            {
+                semaphore.Release();
             }
             return null;
         });
