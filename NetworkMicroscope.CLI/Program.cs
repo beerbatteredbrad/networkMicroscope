@@ -113,11 +113,15 @@ class Program
             Console.WriteLine("    [WARN] Could not resolve target to specific IPs for dual-stack testing.");
         }
 
-        // TCP Test (Default)
-        var tcpResult = await tester.TestTcpConnectionAsync();
-        PrintResult("TCP Connect (Default)", tcpResult.Success, tcpResult.Message, tcpResult.LatencyMs);
+        // Prepare tasks
+        var tasks = new List<Task<ConnectivityResult>>();
+        var taskNames = new List<string>();
 
-        // Dual Stack TCP Tests
+        // 1. Default TCP
+        tasks.Add(tester.TestTcpConnectionAsync());
+        taskNames.Add("TCP Connect (Default)");
+
+        // 2. Dual Stack TCP
         if (ips.Length > 0)
         {
             var v4 = ips.FirstOrDefault(i => i.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
@@ -125,19 +129,28 @@ class Program
 
             if (v4 != null)
             {
-                var v4Result = await tester.TestTcpConnectionAsync(v4);
-                PrintResult($"TCP Connect (IPv4: {v4})", v4Result.Success, v4Result.Message, v4Result.LatencyMs);
+                tasks.Add(tester.TestTcpConnectionAsync(v4));
+                taskNames.Add($"TCP Connect (IPv4: {v4})");
             }
             if (v6 != null)
             {
-                var v6Result = await tester.TestTcpConnectionAsync(v6);
-                PrintResult($"TCP Connect (IPv6: {v6})", v6Result.Success, v6Result.Message, v6Result.LatencyMs);
+                tasks.Add(tester.TestTcpConnectionAsync(v6));
+                taskNames.Add($"TCP Connect (IPv6: {v6})");
             }
         }
 
-        // UDP Test
-        var udpResult = await tester.TestUdpReachabilityAsync();
-        PrintResult("UDP Reachability", udpResult.Success, udpResult.Message, udpResult.LatencyMs);
+        // 3. UDP
+        tasks.Add(tester.TestUdpReachabilityAsync());
+        taskNames.Add("UDP Reachability");
+
+        // Run all in parallel
+        var results = await Task.WhenAll(tasks);
+
+        // Print results
+        for (int i = 0; i < results.Length; i++)
+        {
+            PrintResult(taskNames[i], results[i].Success, results[i].Message, results[i].LatencyMs);
+        }
     }
 
     static async Task RunProtocolTests(string target, int port)
@@ -145,35 +158,56 @@ class Program
         PrintSectionHeader("Running Protocol Analysis...");
         var tester = new ProtocolTester(target, port);
 
-        // HTTP/3
-        var http3Result = await tester.TestHttp3SupportAsync();
-        PrintResult("HTTP/3 Support", http3Result.Success, http3Result.Message, 0);
-        foreach(var kvp in http3Result.Details) Console.WriteLine($"    {kvp.Key}: {kvp.Value}");
+        // Prepare tasks
+        var http3Task = tester.TestHttp3SupportAsync();
+        var tlsDefaultTask = tester.AnalyzeTlsAsync();
+        
+        Task<ProtocolResult>? v4Task = null;
+        Task<ProtocolResult>? v6Task = null;
 
-        // TLS (Default)
-        var tlsResult = await tester.AnalyzeTlsAsync();
-        PrintResult("TLS Analysis (Default)", tlsResult.Success, tlsResult.Message, 0);
-        foreach(var kvp in tlsResult.Details) Console.WriteLine($"    {kvp.Key}: {kvp.Value}");
+        IPAddress? v4 = null;
+        IPAddress? v6 = null;
 
-        // Dual Stack TLS
         try
         {
             var ips = await Dns.GetHostAddressesAsync(target);
-            var v4 = ips.FirstOrDefault(i => i.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
-            var v6 = ips.FirstOrDefault(i => i.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6);
+            v4 = ips.FirstOrDefault(i => i.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+            v6 = ips.FirstOrDefault(i => i.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6);
 
-            if (v4 != null)
-            {
-                var v4Result = await tester.AnalyzeTlsAsync(v4);
-                PrintResult($"TLS Analysis (IPv4: {v4})", v4Result.Success, v4Result.Message, 0);
-            }
-            if (v6 != null)
-            {
-                var v6Result = await tester.AnalyzeTlsAsync(v6);
-                PrintResult($"TLS Analysis (IPv6: {v6})", v6Result.Success, v6Result.Message, 0);
-            }
+            if (v4 != null) v4Task = tester.AnalyzeTlsAsync(v4);
+            if (v6 != null) v6Task = tester.AnalyzeTlsAsync(v6);
         }
-        catch { /* Ignore DNS errors here, already reported in Connectivity */ }
+        catch { }
+
+        // Await all relevant tasks
+        await Task.WhenAll(
+            http3Task, 
+            tlsDefaultTask, 
+            v4Task ?? Task.FromResult(new ProtocolResult()), 
+            v6Task ?? Task.FromResult(new ProtocolResult())
+        );
+
+        // Print HTTP/3
+        var http3Result = await http3Task;
+        PrintResult("HTTP/3 Support", http3Result.Success, http3Result.Message, 0);
+        foreach(var kvp in http3Result.Details) Console.WriteLine($"    {kvp.Key}: {kvp.Value}");
+
+        // Print TLS Default
+        var tlsResult = await tlsDefaultTask;
+        PrintResult("TLS Analysis (Default)", tlsResult.Success, tlsResult.Message, 0);
+        foreach(var kvp in tlsResult.Details) Console.WriteLine($"    {kvp.Key}: {kvp.Value}");
+
+        // Print Dual Stack TLS
+        if (v4Task != null)
+        {
+            var v4Result = await v4Task;
+            PrintResult($"TLS Analysis (IPv4: {v4})", v4Result.Success, v4Result.Message, 0);
+        }
+        if (v6Task != null)
+        {
+            var v6Result = await v6Task;
+            PrintResult($"TLS Analysis (IPv6: {v6})", v6Result.Success, v6Result.Message, 0);
+        }
     }
 
     static async Task RunIntelligenceTests(string target)
@@ -259,8 +293,36 @@ class Program
             Console.WriteLine($"    [INFO] Using explicit ALPN: {string.Join(", ", alpnProtocols.Select(p => p.ToString()))}");
         }
 
-        // Default
-        var result = await tester.CalculateJa4SAsync(null, alpnProtocols);
+        // Prepare tasks
+        var defaultTask = tester.CalculateJa4SAsync(null, alpnProtocols);
+        var h3Task = tester.CalculateJa4H3Async();
+        
+        Task<Ja4Result>? v4Task = null;
+        Task<Ja4Result>? v6Task = null;
+        IPAddress? v4 = null;
+        IPAddress? v6 = null;
+
+        try
+        {
+            var ips = await Dns.GetHostAddressesAsync(target);
+            v4 = ips.FirstOrDefault(i => i.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+            v6 = ips.FirstOrDefault(i => i.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6);
+
+            if (v4 != null) v4Task = tester.CalculateJa4SAsync(v4, alpnProtocols);
+            if (v6 != null) v6Task = tester.CalculateJa4SAsync(v6, alpnProtocols);
+        }
+        catch { }
+
+        // Await all
+        await Task.WhenAll(
+            defaultTask, 
+            h3Task, 
+            v4Task ?? Task.FromResult(new Ja4Result()), 
+            v6Task ?? Task.FromResult(new Ja4Result())
+        );
+
+        // Print Default
+        var result = await defaultTask;
         PrintResult("JA4S (Server - Default)", result.Success, result.Message, 0);
         if (result.Success)
         {
@@ -268,31 +330,23 @@ class Program
             Console.WriteLine($"    Details: {result.RawDetails}");
         }
 
-        // Dual Stack
-        try
+        // Print Dual Stack
+        if (v4Task != null)
         {
-            var ips = await Dns.GetHostAddressesAsync(target);
-            var v4 = ips.FirstOrDefault(i => i.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
-            var v6 = ips.FirstOrDefault(i => i.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6);
-
-            if (v4 != null)
-            {
-                var v4Result = await tester.CalculateJa4SAsync(v4, alpnProtocols);
-                PrintResult($"JA4S (IPv4: {v4})", v4Result.Success, v4Result.Message, 0);
-                if (v4Result.Success) Console.WriteLine($"    Fingerprint: {v4Result.Ja4S}");
-            }
-            if (v6 != null)
-            {
-                var v6Result = await tester.CalculateJa4SAsync(v6, alpnProtocols);
-                PrintResult($"JA4S (IPv6: {v6})", v6Result.Success, v6Result.Message, 0);
-                if (v6Result.Success) Console.WriteLine($"    Fingerprint: {v6Result.Ja4S}");
-            }
+            var v4Result = await v4Task;
+            PrintResult($"JA4S (IPv4: {v4})", v4Result.Success, v4Result.Message, 0);
+            if (v4Result.Success) Console.WriteLine($"    Fingerprint: {v4Result.Ja4S}");
         }
-        catch { }
+        if (v6Task != null)
+        {
+            var v6Result = await v6Task;
+            PrintResult($"JA4S (IPv6: {v6})", v6Result.Success, v6Result.Message, 0);
+            if (v6Result.Success) Console.WriteLine($"    Fingerprint: {v6Result.Ja4S}");
+        }
 
-        // HTTP/3 (QUIC)
+        // Print HTTP/3
         Console.WriteLine("\n    [HTTP/3 QUIC Analysis]");
-        var h3Result = await tester.CalculateJa4H3Async();
+        var h3Result = await h3Task;
         PrintResult("JA4 (QUIC)", h3Result.Success, h3Result.Message, 0);
         if (h3Result.Success)
         {

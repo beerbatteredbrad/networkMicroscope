@@ -281,11 +281,10 @@ public class Ja4Tester
 
     private string ComputeSha256Prefix(string input)
     {
-        using var sha = SHA256.Create();
         byte[] bytes = Encoding.ASCII.GetBytes(input);
-        byte[] hash = sha.ComputeHash(bytes);
-        // Return first 12 chars of hex? JA4 uses 12 chars for the last part usually.
-        return BitConverter.ToString(hash).Replace("-", "").ToLower().Substring(0, 12);
+        byte[] hash = SHA256.HashData(bytes);
+        // Return first 12 chars of hex
+        return Convert.ToHexString(hash).ToLowerInvariant().Substring(0, 12);
     }
 
     public async Task<Ja4Result> CalculateJa4H3Async(IPAddress? specificIp = null)
