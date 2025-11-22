@@ -27,6 +27,7 @@ A "swiss-army knife" network diagnostic tool designed to perform deep analysis o
     - HTTP/3 (QUIC) - Enforced check
     - TLS Analysis (Fingerprinting, Certificate Validation, Dual Stack support)
     - JA4S Fingerprinting (Server-side JA4 calculation, Dual Stack support)
+    - JA4 (QUIC) Fingerprinting (HTTP/3 support check with fingerprint generation)
 3.  **Network Intelligence & DNS:**
     - ASN Information (via public APIs)
     - GeoIP Data
@@ -55,7 +56,9 @@ A "swiss-army knife" network diagnostic tool designed to perform deep analysis o
 - **PerformanceTester:** Handles Latency (Ping) and Bandwidth (Download).
 - **TcpSprayTester:** Handles TCP Spray reliability testing (Packet Loss, Jitter) via rapid user-mode connection attempts.
 - **AdvancedNetworkTester:** Handles Traceroute, Path MTU Discovery, and Port Scanning.
-- **Ja4Tester:** Handles JA4S (Server) fingerprint calculation by intercepting the TLS handshake using a custom `TlsSnoopingStream` wrapper around `SslStream`.
+- **Ja4Tester:** 
+    - Handles JA4S (Server) fingerprint calculation by intercepting the TLS handshake using a custom `TlsSnoopingStream` wrapper around `SslStream`.
+    - Handles JA4 (QUIC) fingerprinting using `System.Net.Quic` to negotiate HTTP/3 and extract cipher/ALPN details.
 
 ## Testing Strategy
 - **Unit Tests:** `NetworkMicroscope.Tests` covers parsing logic (JA4S for TLS 1.2/1.3, ALPN variations, edge cases) and mocked intelligence providers.

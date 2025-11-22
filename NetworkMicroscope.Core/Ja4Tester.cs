@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Quic;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -25,7 +26,7 @@ public class Ja4Tester
         _port = port;
     }
 
-    public async Task<Ja4Result> CalculateJa4SAsync(IPAddress? specificIp = null)
+    public async Task<Ja4Result> CalculateJa4SAsync(IPAddress? specificIp = null, List<SslApplicationProtocol>? alpnProtocols = null)
     {
         var result = new Ja4Result();
         try
@@ -61,14 +62,23 @@ public class Ja4Tester
 
             // Use SslStream to perform the handshake
             // We don't validate the cert because we just want the handshake bytes
-            using var sslStream = new SslStream(snoopingStream, false, (sender, cert, chain, errors) => true);
+            using var sslStream = new SslStream(snoopingStream, false);
 
+            Exception? handshakeException = null;
             try
             {
-                await sslStream.AuthenticateAsClientAsync(_target);
+                var options = new SslClientAuthenticationOptions
+                {
+                    TargetHost = _target,
+                    RemoteCertificateValidationCallback = (sender, cert, chain, errors) => true,
+                    ApplicationProtocols = alpnProtocols,
+                    EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13
+                };
+                await sslStream.AuthenticateAsClientAsync(options, CancellationToken.None);
             }
-            catch
+            catch (Exception ex)
             {
+                handshakeException = ex;
                 // Handshake might fail or complete, we just want the bytes
             }
 
@@ -78,7 +88,7 @@ public class Ja4Tester
             if (serverHelloBytes.Length < 5)
             {
                 result.Success = false;
-                result.Message = "No response or response too short.";
+                result.Message = $"No response or response too short. Handshake Exception: {handshakeException?.Message ?? "None"}";
                 return result;
             }
 
@@ -99,7 +109,15 @@ public class Ja4Tester
             byte[] relevantBytes = new byte[serverHelloBytes.Length - serverHelloOffset];
             Array.Copy(serverHelloBytes, serverHelloOffset, relevantBytes, 0, relevantBytes.Length);
             
-            return ParseServerHello(relevantBytes, relevantBytes.Length);
+            var ja4Result = ParseServerHello(relevantBytes, relevantBytes.Length);
+            
+            if (ja4Result.Success)
+            {
+                 string negotiatedAlpn = sslStream.NegotiatedApplicationProtocol.ToString();
+                 if (string.IsNullOrEmpty(negotiatedAlpn)) negotiatedAlpn = "None";
+                 ja4Result.RawDetails += $", Negotiated ALPN: {negotiatedAlpn}";
+            }
+            return ja4Result;
         }
         catch (Exception ex)
         {
@@ -268,5 +286,123 @@ public class Ja4Tester
         byte[] hash = sha.ComputeHash(bytes);
         // Return first 12 chars of hex? JA4 uses 12 chars for the last part usually.
         return BitConverter.ToString(hash).Replace("-", "").ToLower().Substring(0, 12);
+    }
+
+    public async Task<Ja4Result> CalculateJa4H3Async(IPAddress? specificIp = null)
+    {
+        var result = new Ja4Result();
+        
+        if (!QuicConnection.IsSupported)
+        {
+            result.Success = false;
+            result.Message = "QUIC is not supported on this platform.";
+            return result;
+        }
+
+        try
+        {
+            IPEndPoint endpoint;
+            if (specificIp != null)
+            {
+                endpoint = new IPEndPoint(specificIp, _port);
+            }
+            else
+            {
+                var ips = await Dns.GetHostAddressesAsync(_target);
+                var ip = ips.FirstOrDefault(i => i.AddressFamily == AddressFamily.InterNetwork) ?? ips.First();
+                endpoint = new IPEndPoint(ip, _port);
+            }
+
+            var quicOptions = new QuicClientConnectionOptions
+            {
+                RemoteEndPoint = endpoint,
+                DefaultStreamErrorCode = 0,
+                DefaultCloseErrorCode = 0,
+                // HTTP/3 requires the server to open at least 3 unidirectional streams (Control, QPACK Encoder, QPACK Decoder).
+                // If this is 0 (default), the handshake or immediate post-handshake will fail.
+                MaxInboundUnidirectionalStreams = 100,
+                MaxInboundBidirectionalStreams = 10,
+                ClientAuthenticationOptions = new SslClientAuthenticationOptions
+                {
+                    TargetHost = _target,
+                    // Try standard h3 and older h3-29 which some servers still use
+                    ApplicationProtocols = new List<SslApplicationProtocol> 
+                    { 
+                        SslApplicationProtocol.Http3, 
+                        new SslApplicationProtocol("h3-29") 
+                    },
+                    RemoteCertificateValidationCallback = (sender, cert, chain, errors) => true
+                }
+            };
+
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            
+            await using var connection = await QuicConnection.ConnectAsync(quicOptions, timeoutCts.Token);
+
+            // If we are here, handshake succeeded
+            
+            // Construct JA4 fingerprint for QUIC
+            // q<version><alpn>_<cipher>_<extensions_hash>
+            
+            // Version: QUIC implies TLS 1.3
+            string versionStr = "13";
+            string protocolStr = "q"; // QUIC
+
+            // ALPN
+            string alpn = "00";
+            var negotiatedAlpn = connection.NegotiatedApplicationProtocol.ToString();
+            if (negotiatedAlpn == "h3") alpn = "h3";
+            else if (negotiatedAlpn == "h3-29") alpn = "h3"; // Map h3-29 to h3 for JA4 consistency? Or keep raw? JA4 usually standardizes.
+            else if (!string.IsNullOrEmpty(negotiatedAlpn)) alpn = negotiatedAlpn.Substring(0, Math.Min(2, negotiatedAlpn.Length));
+
+            string part1 = $"{protocolStr}{versionStr}{alpn}";
+
+            // Cipher
+            var cipher = connection.NegotiatedCipherSuite;
+            string cipherHex = "0000";
+            
+            // Map TlsCipherSuite enum to hex if possible, or use a switch
+            // .NET 10 might have a better way, but for now let's map common ones
+            switch (cipher)
+            {
+                case TlsCipherSuite.TLS_AES_128_GCM_SHA256: cipherHex = "1301"; break;
+                case TlsCipherSuite.TLS_AES_256_GCM_SHA384: cipherHex = "1302"; break;
+                case TlsCipherSuite.TLS_CHACHA20_POLY1305_SHA256: cipherHex = "1303"; break;
+                default: cipherHex = ((int)cipher).ToString("X4"); break;
+            }
+            
+            string part2 = cipherHex;
+
+            // Extensions
+            // We cannot get extensions from QuicConnection currently.
+            // We default to 000000000000 (12 zeros)
+            string part3 = "000000000000";
+
+            result.Success = true;
+            result.Ja4S = $"{part1}_{part2}_{part3}";
+            result.Message = "JA4 (QUIC) Calculated.";
+            result.RawDetails = $"Ver: {versionStr}, Cipher: {cipherHex}, ALPN: {negotiatedAlpn}, Exts: (Hidden - Not exposed by .NET QUIC API)";
+        }
+        catch (OperationCanceledException)
+        {
+            result.Success = false;
+            result.Message = "Connection timed out (2s).";
+        }
+        catch (QuicException qEx)
+        {
+             result.Success = false;
+             result.Message = $"QUIC Protocol Error: {qEx.QuicError} - {qEx.Message}";
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.Message = $"QUIC Handshake Failed: {ex.Message}";
+            if (ex.InnerException != null)
+            {
+                result.Message += $" Inner: {ex.InnerException.Message}";
+            }
+        }
+
+        return result;
     }
 }

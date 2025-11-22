@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Security;
 using NetworkMicroscope.Core;
 
 namespace NetworkMicroscope.CLI;
@@ -15,6 +16,7 @@ class Program
         string testType = "all";
         string downloadUrl = "";
         int probes = 100;
+        string alpn = "";
 
         // Simple manual parsing for now (can use System.CommandLine later)
         for (int i = 0; i < args.Length; i++)
@@ -24,6 +26,7 @@ class Program
             if (args[i] == "--test" && i + 1 < args.Length) testType = args[i + 1];
             if (args[i] == "--download-url" && i + 1 < args.Length) downloadUrl = args[i + 1];
             if (args[i] == "--probes" && i + 1 < args.Length) int.TryParse(args[i + 1], out probes);
+            if (args[i] == "--alpn" && i + 1 < args.Length) alpn = args[i + 1];
         }
 
         Console.WriteLine($"Target: {target}, Port: {port}, Test: {testType}");
@@ -56,7 +59,7 @@ class Program
 
         if (testType == "ja4" || testType == "all")
         {
-            RunJa4Tests(target, port).Wait();
+            RunJa4Tests(target, port, alpn).Wait();
         }
 
         if (testType == "tcpspray" || testType == "all")
@@ -230,13 +233,24 @@ class Program
         foreach (var p in openPorts) Console.WriteLine($"    {p}");
     }
 
-    static async Task RunJa4Tests(string target, int port)
+    static async Task RunJa4Tests(string target, int port, string alpn)
     {
         Console.WriteLine("\nRunning JA4 Fingerprinting...");
         var tester = new Ja4Tester(target, port);
         
+        List<SslApplicationProtocol>? alpnProtocols = null;
+        if (!string.IsNullOrEmpty(alpn))
+        {
+            alpnProtocols = new List<SslApplicationProtocol>();
+            foreach (var p in alpn.Split(','))
+            {
+                alpnProtocols.Add(new SslApplicationProtocol(p.Trim()));
+            }
+            Console.WriteLine($"    [INFO] Using explicit ALPN: {string.Join(", ", alpnProtocols.Select(p => p.ToString()))}");
+        }
+
         // Default
-        var result = await tester.CalculateJa4SAsync();
+        var result = await tester.CalculateJa4SAsync(null, alpnProtocols);
         PrintResult("JA4S (Server - Default)", result.Success, result.Message, 0);
         if (result.Success)
         {
@@ -253,18 +267,28 @@ class Program
 
             if (v4 != null)
             {
-                var v4Result = await tester.CalculateJa4SAsync(v4);
+                var v4Result = await tester.CalculateJa4SAsync(v4, alpnProtocols);
                 PrintResult($"JA4S (IPv4: {v4})", v4Result.Success, v4Result.Message, 0);
                 if (v4Result.Success) Console.WriteLine($"    Fingerprint: {v4Result.Ja4S}");
             }
             if (v6 != null)
             {
-                var v6Result = await tester.CalculateJa4SAsync(v6);
+                var v6Result = await tester.CalculateJa4SAsync(v6, alpnProtocols);
                 PrintResult($"JA4S (IPv6: {v6})", v6Result.Success, v6Result.Message, 0);
                 if (v6Result.Success) Console.WriteLine($"    Fingerprint: {v6Result.Ja4S}");
             }
         }
         catch { }
+
+        // HTTP/3 (QUIC)
+        Console.WriteLine("\n    [HTTP/3 QUIC Analysis]");
+        var h3Result = await tester.CalculateJa4H3Async();
+        PrintResult("JA4 (QUIC)", h3Result.Success, h3Result.Message, 0);
+        if (h3Result.Success)
+        {
+            Console.WriteLine($"    Fingerprint: {h3Result.Ja4S}");
+            Console.WriteLine($"    Details: {h3Result.RawDetails}");
+        }
     }
 
     static void PrintResult(string testName, bool success, string message, long latencyMs)

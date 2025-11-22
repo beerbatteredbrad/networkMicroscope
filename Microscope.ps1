@@ -58,7 +58,14 @@ if ($Interactive -or (-not $Target)) {
             "5" { & $exePath --target $Target --test intelligence }
             "6" { & $exePath --target $Target --test performance --download-url $DownloadUrl }
             "7" { & $exePath --target $Target --test advanced }
-            "8" { & $exePath --target $Target --test ja4 }
+            "8" { 
+                $alpn = Read-Host "Enter explicit ALPN (e.g. h2,http/1.1) [Optional]"
+                if ($alpn) {
+                    & $exePath --target $Target --test ja4 --alpn $alpn
+                } else {
+                    & $exePath --target $Target --test ja4
+                }
+            }
             "9" { 
                 $p = Read-Host "Enter number of probes [Default: 100]"
                 if (-not $p) { $p = 100 }
