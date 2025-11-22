@@ -80,6 +80,13 @@ class Program
         Console.ResetColor();
     }
 
+    static void PrintSubHeader(string title)
+    {
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine($"    {title}");
+        Console.ResetColor();
+    }
+
     static async Task RunTcpSprayTests(string target, int port, int probes)
     {
         PrintSectionHeader($"Running TCP Spray (Reliability Test) with {probes} probes...");
@@ -276,21 +283,30 @@ class Program
         var tester = new AdvancedNetworkTester(target);
 
         // Traceroute
-        Console.WriteLine("    [Traceroute]");
+        PrintSubHeader("[Traceroute]");
         var trace = await tester.RunTracerouteAsync();
         foreach (var hop in trace) Console.WriteLine($"    {hop}");
 
         // PMTU
-        Console.WriteLine("    [Path MTU Discovery]");
+        Console.WriteLine();
+        PrintSubHeader("[Path MTU Discovery]");
         var pmtu = await tester.DiscoverPathMtuAsync();
         Console.WriteLine($"    {pmtu}");
 
         // Port Scan
         var portsToScan = ParsePorts(portsArg).ToList();
-        Console.WriteLine($"    [Port Scan - Scanning {portsToScan.Count} ports]");
+        Console.WriteLine();
+        
+        string scanDescription = string.IsNullOrWhiteSpace(portsArg) 
+            ? $"Scanning NMAP top {portsToScan.Count} ports" 
+            : $"Scanning {portsToScan.Count} custom ports";
+
+        PrintSubHeader($"[Port Scan - {scanDescription}]");
         
         var openPorts = await tester.ScanPortsAsync(portsToScan);
         foreach (var p in openPorts) Console.WriteLine($"    {p}");
+        
+        Console.WriteLine(); // Add space at the end
     }
 
     static IEnumerable<int> ParsePorts(string portsArg)

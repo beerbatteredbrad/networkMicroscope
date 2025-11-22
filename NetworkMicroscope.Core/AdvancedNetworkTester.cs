@@ -124,6 +124,20 @@ public class AdvancedNetworkTester
         using var ping = new Ping();
         var options = new PingOptions(64, true); // TTL 64, DontFragment = TRUE
 
+        // Pre-flight check: Ensure target responds to ICMP at all
+        try
+        {
+            var preCheck = await ping.SendPingAsync(targetIp, 2000, new byte[32], options);
+            if (preCheck.Status != IPStatus.Success)
+            {
+                return $"Target does not respond to ICMP (Status: {preCheck.Status}). PMTU Discovery skipped.";
+            }
+        }
+        catch
+        {
+            return "Target unreachable via ICMP. PMTU Discovery skipped.";
+        }
+
         int low = 68; // Minimum IPv4 MTU
         int high = 1472; // Standard Ethernet Payload
         int lastSuccess = 0;
@@ -136,7 +150,7 @@ public class AdvancedNetworkTester
             
             try
             {
-                var reply = await ping.SendPingAsync(targetIp, 2000, buffer, options);
+                var reply = await ping.SendPingAsync(targetIp, 1000, buffer, options); // Reduced timeout to 1s for search
                 
                 if (reply.Status == IPStatus.Success)
                 {
