@@ -37,7 +37,7 @@ A "swiss-army knife" network diagnostic tool designed to perform deep analysis o
     - Bandwidth Estimation (Download test against user-provided HTTP/HTTPS endpoint).
     - TCP Spray (Reliability Test): Sends a burst of TCP connection attempts (default 100) to measure packet loss, latency, and jitter without using ICMP.
 5.  **Reporting:**
-    - Console Output.
+    - Console Output (Color-coded sections for readability).
     - Optional JSON file export (Future).
 
 ## Architecture

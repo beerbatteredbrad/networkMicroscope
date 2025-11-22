@@ -68,9 +68,19 @@ class Program
         }
     }
 
+    static void PrintSectionHeader(string title)
+    {
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("==================================================");
+        Console.WriteLine($" {title}");
+        Console.WriteLine("==================================================");
+        Console.ResetColor();
+    }
+
     static async Task RunTcpSprayTests(string target, int port, int probes)
     {
-        Console.WriteLine($"\nRunning TCP Spray (Reliability Test) with {probes} probes...");
+        PrintSectionHeader($"Running TCP Spray (Reliability Test) with {probes} probes...");
         var tester = new TcpSprayTester(target, port);
         
         // Default: 100ms interval
@@ -88,7 +98,7 @@ class Program
 
     static async Task RunConnectivityTests(string target, int port)
     {
-        Console.WriteLine("Running Connectivity Tests...");
+        PrintSectionHeader("Running Connectivity Tests...");
         var tester = new ConnectivityTester(target, port);
 
         // Resolve IPs to check for Dual Stack
@@ -132,7 +142,7 @@ class Program
 
     static async Task RunProtocolTests(string target, int port)
     {
-        Console.WriteLine("\nRunning Protocol Analysis...");
+        PrintSectionHeader("Running Protocol Analysis...");
         var tester = new ProtocolTester(target, port);
 
         // HTTP/3
@@ -168,7 +178,7 @@ class Program
 
     static async Task RunIntelligenceTests(string target)
     {
-        Console.WriteLine("\nRunning Network Intelligence...");
+        PrintSectionHeader("Running Network Intelligence...");
         
         // In a real app, we'd use Dependency Injection here
         using var httpClient = new HttpClient();
@@ -190,7 +200,7 @@ class Program
 
     static async Task RunPerformanceTests(string target, string downloadUrl)
     {
-        Console.WriteLine("\nRunning Performance Tests...");
+        PrintSectionHeader("Running Performance Tests...");
         var tester = new PerformanceTester(target);
 
         // Latency
@@ -213,7 +223,7 @@ class Program
 
     static async Task RunAdvancedTests(string target)
     {
-        Console.WriteLine("\nRunning Advanced Network Tests...");
+        PrintSectionHeader("Running Advanced Network Tests...");
         var tester = new AdvancedNetworkTester(target);
 
         // Traceroute
@@ -235,7 +245,7 @@ class Program
 
     static async Task RunJa4Tests(string target, int port, string alpn)
     {
-        Console.WriteLine("\nRunning JA4 Fingerprinting...");
+        PrintSectionHeader("Running JA4 Fingerprinting...");
         var tester = new Ja4Tester(target, port);
         
         List<SslApplicationProtocol>? alpnProtocols = null;

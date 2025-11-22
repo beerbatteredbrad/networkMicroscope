@@ -113,13 +113,13 @@ Network Microscope CLI
 Target: google.com, Port: 443, Test: connectivity
 --------------------------------------------------
 
-Running Connectivity Test...
-[PASS] DNS Resolution: Resolved 2 address(es)
-       - 142.250.190.46 (InterNetwork)
-       - 2607:f8b0:4009:804::200e (InterNetworkV6)
-[PASS] TCP Connect (IPv4): Connected to 142.250.190.46:443 in 12ms
-[PASS] TCP Connect (IPv6): Connected to 2607:f8b0:4009:804::200e:443 in 15ms
-[PASS] HTTP Head: Server: gws, Status: 200 OK
+==================================================
+ Running Connectivity Tests...
+==================================================
+[PASS] TCP Connect (Default): Successfully connected to google.com:443 via TCP. (12ms)
+[PASS] TCP Connect (IPv4: 142.250.190.46): Successfully connected to 142.250.190.46:443 via TCP. (12ms)
+[PASS] TCP Connect (IPv6: 2607:f8b0:4009:804::200e): Successfully connected to 2607:f8b0:4009:804::200e:443 via TCP. (15ms)
+[PASS] UDP Reachability: UDP Packet sent to google.com:443. (1ms)
 ```
 
 ### 2. TCP Spray (Reliability)
@@ -132,17 +132,14 @@ Network Microscope CLI
 Target: google.com, Port: 443, Test: tcpspray
 --------------------------------------------------
 
-Running TCP Spray (100 probes)...
-..................................................
-..................................................
-
-[TCP Spray Results]
-  Sent: 100, Success: 100, Failed: 0
-  Packet Loss: 0.00%
-  Min Latency: 11ms
-  Max Latency: 45ms
-  Avg Latency: 14ms
-  Jitter: 3ms
+==================================================
+ Running TCP Spray (Reliability Test) with 100 probes...
+==================================================
+[PASS] TCP Spray: TCP Spray Completed.
+    Sent: 100, Received: 100
+    Loss: 0.0%
+    Latency (ms): Min=11, Max=45, Avg=14
+    Jitter: 3ms
 ```
 
 ### 3. JA4 Fingerprinting (TLS & QUIC)
@@ -155,7 +152,9 @@ Network Microscope CLI
 Target: facebook.com, Port: 443, Test: ja4
 --------------------------------------------------
 
-Running JA4 Fingerprinting...
+==================================================
+ Running JA4 Fingerprinting...
+==================================================
 [PASS] JA4S (Server - Default): JA4S Calculated.
     Fingerprint: t1300_1301_c35a6cc4faa0
     Details: Ver: 13, Cipher: 1301, Exts: 2, Negotiated ALPN: None
