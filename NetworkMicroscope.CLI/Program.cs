@@ -32,6 +32,7 @@ class Program
         }
 
         Console.WriteLine($"Target: {target}, Port: {port}, Test: {testType}");
+        if (!string.IsNullOrEmpty(downloadUrl)) Console.WriteLine($"Download URL: {downloadUrl}");
         Console.WriteLine("--------------------------------------------------");
 
         if (testType == "connectivity" || testType == "all")

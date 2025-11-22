@@ -56,7 +56,13 @@ if ($Interactive -or (-not $Target)) {
             "3" { & $exePath --target $Target --test connectivity }
             "4" { & $exePath --target $Target --test protocol }
             "5" { & $exePath --target $Target --test intelligence }
-            "6" { & $exePath --target $Target --test performance --download-url $DownloadUrl }
+            "6" { 
+                if ($DownloadUrl) {
+                    & $exePath --target $Target --test performance --download-url $DownloadUrl 
+                } else {
+                    & $exePath --target $Target --test performance
+                }
+            }
             "7" { & $exePath --target $Target --test advanced }
             "8" { 
                 $alpn = Read-Host "Enter explicit ALPN (e.g. h2,http/1.1) [Optional]"
@@ -71,7 +77,13 @@ if ($Interactive -or (-not $Target)) {
                 if (-not $p) { $p = 100 }
                 & $exePath --target $Target --test tcpspray --probes $p 
             }
-            "10" { & $exePath --target $Target --test all --download-url $DownloadUrl }
+            "10" { 
+                if ($DownloadUrl) {
+                    & $exePath --target $Target --test all --download-url $DownloadUrl 
+                } else {
+                    & $exePath --target $Target --test all
+                }
+            }
             "Q" { return }
             "q" { return }
             Default { Write-Warning "Invalid option" }
