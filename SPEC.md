@@ -20,7 +20,7 @@ A "swiss-army knife" network diagnostic tool designed to perform deep analysis o
 1.  **Connectivity & Path Analysis:**
     - TCP Connect (Dual Stack IPv4/IPv6 support, 2s timeout for IP-specific tests)
     - UDP Reachability
-    - Port Scanning (Top 20 Common ports)
+    - Port Scanning (Top 100 Common ports by default, supports custom ranges/lists)
     - Traceroute (Path visualization & hop latency)
     - Path MTU Discovery (Fragmentation check)
 2.  **Protocol Support:**

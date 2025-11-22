@@ -17,6 +17,7 @@ class Program
         string downloadUrl = "";
         int probes = 100;
         string alpn = "";
+        string portsArg = "";
 
         // Simple manual parsing for now (can use System.CommandLine later)
         for (int i = 0; i < args.Length; i++)
@@ -27,6 +28,7 @@ class Program
             if (args[i] == "--download-url" && i + 1 < args.Length) downloadUrl = args[i + 1];
             if (args[i] == "--probes" && i + 1 < args.Length) int.TryParse(args[i + 1], out probes);
             if (args[i] == "--alpn" && i + 1 < args.Length) alpn = args[i + 1];
+            if (args[i] == "--ports" && i + 1 < args.Length) portsArg = args[i + 1];
         }
 
         Console.WriteLine($"Target: {target}, Port: {port}, Test: {testType}");
@@ -54,7 +56,7 @@ class Program
 
         if (testType == "advanced" || testType == "all")
         {
-            RunAdvancedTests(target).Wait();
+            RunAdvancedTests(target, portsArg).Wait();
         }
 
         if (testType == "ja4" || testType == "all")
@@ -268,7 +270,7 @@ class Program
         }
     }
 
-    static async Task RunAdvancedTests(string target)
+    static async Task RunAdvancedTests(string target, string portsArg)
     {
         PrintSectionHeader("Running Advanced Network Tests...");
         var tester = new AdvancedNetworkTester(target);
@@ -283,11 +285,38 @@ class Program
         var pmtu = await tester.DiscoverPathMtuAsync();
         Console.WriteLine($"    {pmtu}");
 
-        // Port Scan (Common Ports)
-        Console.WriteLine("    [Port Scan - Top 20 Common Ports]");
-        var commonPorts = new[] { 21, 22, 23, 25, 53, 80, 110, 135, 139, 143, 443, 445, 993, 995, 1433, 3306, 3389, 5900, 8080, 8443 };
-        var openPorts = await tester.ScanPortsAsync(commonPorts);
+        // Port Scan
+        var portsToScan = ParsePorts(portsArg).ToList();
+        Console.WriteLine($"    [Port Scan - Scanning {portsToScan.Count} ports]");
+        
+        var openPorts = await tester.ScanPortsAsync(portsToScan);
         foreach (var p in openPorts) Console.WriteLine($"    {p}");
+    }
+
+    static IEnumerable<int> ParsePorts(string portsArg)
+    {
+        if (string.IsNullOrWhiteSpace(portsArg))
+            return AdvancedNetworkTester.Top100Ports;
+
+        var ports = new HashSet<int>();
+        var parts = portsArg.Split(',');
+
+        foreach (var part in parts)
+        {
+            if (part.Contains('-'))
+            {
+                var range = part.Split('-');
+                if (range.Length == 2 && int.TryParse(range[0], out int start) && int.TryParse(range[1], out int end))
+                {
+                    for (int i = start; i <= end; i++) ports.Add(i);
+                }
+            }
+            else
+            {
+                if (int.TryParse(part, out int p)) ports.Add(p);
+            }
+        }
+        return ports.OrderBy(p => p);
     }
 
     static async Task RunJa4Tests(string target, int port, string alpn)

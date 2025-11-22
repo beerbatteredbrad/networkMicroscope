@@ -19,7 +19,7 @@ Designed for network engineers, developers, and sysadmins who need to see *exact
 *   **TCP/UDP Reachability:** Verify port openness and protocol responsiveness.
 *   **Advanced Traceroute:** Visualize the path and hop latencies.
 *   **Path MTU Discovery:** Detect fragmentation issues.
-*   **Port Scanning:** Quickly check the top 20 common ports.
+*   **Port Scanning:** Check the top 100 common ports or specify a custom range.
 
 ### 🛡️ Protocol & Security
 *   **HTTP/3 (QUIC):** Verify if the target supports the latest web protocols.
@@ -97,6 +97,17 @@ dotnet run --project NetworkMicroscope.CLI -- --target google.com --test ja4
 **Full Suite:**
 ```powershell
 dotnet run --project NetworkMicroscope.CLI -- --target google.com --test all
+```
+
+**Advanced Tests (Port Scan):**
+*Scan top 100 ports (default)*
+```powershell
+dotnet run --project NetworkMicroscope.CLI -- --target google.com --test advanced
+```
+
+*Scan specific ports or range*
+```powershell
+dotnet run --project NetworkMicroscope.CLI -- --target google.com --test advanced --ports 80,443,8000-8010
 ```
 
 ---
