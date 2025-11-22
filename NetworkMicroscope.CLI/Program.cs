@@ -123,7 +123,11 @@ class Program
         PrintSectionHeader("Running Connectivity Tests...");
         var tester = new ConnectivityTester(target, port);
 
-        // Resolve IPs to check for Dual Stack
+        // Start generic tasks immediately
+        var tcpDefaultTask = tester.TestTcpConnectionAsync();
+        var udpTask = tester.TestUdpReachabilityAsync();
+
+        // Resolve IPs for Dual Stack
         IPAddress[] ips = Array.Empty<IPAddress>();
         try
         {
@@ -135,44 +139,39 @@ class Program
             Console.WriteLine("    [WARN] Could not resolve target to specific IPs for dual-stack testing.");
         }
 
-        // Prepare tasks
-        var tasks = new List<Task<ConnectivityResult>>();
-        var taskNames = new List<string>();
+        // Start IP-specific tasks
+        Task<ConnectivityResult>? v4Task = null;
+        Task<ConnectivityResult>? v6Task = null;
+        IPAddress? v4 = null;
+        IPAddress? v6 = null;
 
-        // 1. Default TCP
-        tasks.Add(tester.TestTcpConnectionAsync());
-        taskNames.Add("TCP Connect (Default)");
-
-        // 2. Dual Stack TCP
         if (ips.Length > 0)
         {
-            var v4 = ips.FirstOrDefault(i => i.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
-            var v6 = ips.FirstOrDefault(i => i.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6);
+            v4 = ips.FirstOrDefault(i => i.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+            v6 = ips.FirstOrDefault(i => i.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6);
 
-            if (v4 != null)
-            {
-                tasks.Add(tester.TestTcpConnectionAsync(v4));
-                taskNames.Add($"TCP Connect (IPv4: {v4})");
-            }
-            if (v6 != null)
-            {
-                tasks.Add(tester.TestTcpConnectionAsync(v6));
-                taskNames.Add($"TCP Connect (IPv6: {v6})");
-            }
+            if (v4 != null) v4Task = tester.TestTcpConnectionAsync(v4);
+            if (v6 != null) v6Task = tester.TestTcpConnectionAsync(v6);
         }
 
-        // 3. UDP
-        tasks.Add(tester.TestUdpReachabilityAsync());
-        taskNames.Add("UDP Reachability");
+        // Await and Print in order
+        var tcpResult = await tcpDefaultTask;
+        PrintResult("TCP Connect (Default)", tcpResult.Success, tcpResult.Message, tcpResult.LatencyMs);
 
-        // Run all in parallel
-        var results = await Task.WhenAll(tasks);
-
-        // Print results
-        for (int i = 0; i < results.Length; i++)
+        if (v4Task != null)
         {
-            PrintResult(taskNames[i], results[i].Success, results[i].Message, results[i].LatencyMs);
+            var v4Result = await v4Task;
+            PrintResult($"TCP Connect (IPv4: {v4})", v4Result.Success, v4Result.Message, v4Result.LatencyMs);
         }
+
+        if (v6Task != null)
+        {
+            var v6Result = await v6Task;
+            PrintResult($"TCP Connect (IPv6: {v6})", v6Result.Success, v6Result.Message, v6Result.LatencyMs);
+        }
+
+        var udpResult = await udpTask;
+        PrintResult("UDP Reachability", udpResult.Success, udpResult.Message, udpResult.LatencyMs);
     }
 
     static async Task RunProtocolTests(string target, int port)
@@ -200,14 +199,6 @@ class Program
             if (v6 != null) v6Task = tester.AnalyzeTlsAsync(v6);
         }
         catch { }
-
-        // Await all relevant tasks
-        await Task.WhenAll(
-            http3Task, 
-            tlsDefaultTask, 
-            v4Task ?? Task.FromResult(new ProtocolResult()), 
-            v6Task ?? Task.FromResult(new ProtocolResult())
-        );
 
         // Print HTTP/3
         var http3Result = await http3Task;
@@ -334,14 +325,6 @@ class Program
             if (v6 != null) v6Task = tester.CalculateJa4SAsync(v6, alpnProtocols);
         }
         catch { }
-
-        // Await all
-        await Task.WhenAll(
-            defaultTask, 
-            h3Task, 
-            v4Task ?? Task.FromResult(new Ja4Result()), 
-            v6Task ?? Task.FromResult(new Ja4Result())
-        );
 
         // Print Default
         var result = await defaultTask;
