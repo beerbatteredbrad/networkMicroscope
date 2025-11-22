@@ -103,8 +103,55 @@ dotnet run --project NetworkMicroscope.CLI -- --target google.com --test all
 
 ## 📸 Example Output
 
-### JA4 Fingerprinting (TLS & QUIC)
+### 1. Connectivity Test
+*Verifies DNS, IPv4/IPv6 reachability, and basic HTTP response.*
+
 ```text
+PS C:\NetworkMicroscope> dotnet run --project NetworkMicroscope.CLI -- --target google.com --test connectivity
+
+Network Microscope CLI
+Target: google.com, Port: 443, Test: connectivity
+--------------------------------------------------
+
+Running Connectivity Test...
+[PASS] DNS Resolution: Resolved 2 address(es)
+       - 142.250.190.46 (InterNetwork)
+       - 2607:f8b0:4009:804::200e (InterNetworkV6)
+[PASS] TCP Connect (IPv4): Connected to 142.250.190.46:443 in 12ms
+[PASS] TCP Connect (IPv6): Connected to 2607:f8b0:4009:804::200e:443 in 15ms
+[PASS] HTTP Head: Server: gws, Status: 200 OK
+```
+
+### 2. TCP Spray (Reliability)
+*Sends a burst of concurrent TCP probes to measure latency, jitter, and packet loss.*
+
+```text
+PS C:\NetworkMicroscope> dotnet run --project NetworkMicroscope.CLI -- --target google.com --test tcpspray --probes 100
+
+Network Microscope CLI
+Target: google.com, Port: 443, Test: tcpspray
+--------------------------------------------------
+
+Running TCP Spray (100 probes)...
+..................................................
+..................................................
+
+[TCP Spray Results]
+  Sent: 100, Success: 100, Failed: 0
+  Packet Loss: 0.00%
+  Min Latency: 11ms
+  Max Latency: 45ms
+  Avg Latency: 14ms
+  Jitter: 3ms
+```
+
+### 3. JA4 Fingerprinting (TLS & QUIC)
+*Generates JA4S (Server) and JA4 (QUIC) fingerprints for security analysis.*
+
+```text
+PS C:\NetworkMicroscope> dotnet run --project NetworkMicroscope.CLI -- --target facebook.com --test ja4
+
+Network Microscope CLI
 Target: facebook.com, Port: 443, Test: ja4
 --------------------------------------------------
 
