@@ -170,7 +170,8 @@ public class AdvancedNetworkTester
     public async Task<List<string>> ScanPortsAsync(IEnumerable<int> ports)
     {
         var results = new List<string>();
-        var tasks = ports.Select(async port =>
+        var portList = ports.ToList();
+        var tasks = portList.Select(async port =>
         {
             using var client = new TcpClient();
             try
@@ -179,22 +180,35 @@ public class AdvancedNetworkTester
                 var timeoutTask = Task.Delay(1000); // 1 second timeout per port
                 
                 var completed = await Task.WhenAny(connectTask, timeoutTask);
-                if (completed == connectTask && client.Connected)
+                if (completed == connectTask)
                 {
-                    return $"Port {port}: OPEN";
+                    // Ensure the task completed successfully (didn't fault)
+                    await connectTask; 
+                    if (client.Connected)
+                    {
+                        return $"Port {port}: OPEN";
+                    }
                 }
             }
             catch
             {
-                // Ignore errors
+                // Ignore errors (Closed/Filtered)
             }
             return null;
         });
 
         var scanResults = await Task.WhenAll(tasks);
-        results.AddRange(scanResults.Where(r => r != null)!);
+        var openPorts = scanResults.Where(r => r != null).ToList();
+        results.AddRange(openPorts!);
         
-        if (results.Count == 0) results.Add("No open ports found in the specified range.");
+        if (results.Count == 0) 
+        {
+            results.Add("No open ports found in the specified range.");
+        }
+        else if (results.Count == portList.Count)
+        {
+            results.Add("[WARNING] All scanned ports are OPEN. This usually indicates a firewall or load balancer is intercepting connections (e.g., Azure Front Door).");
+        }
         
         return results;
     }
