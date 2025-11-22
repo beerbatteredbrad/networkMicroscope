@@ -53,6 +53,10 @@ public class ProtocolTester
             if (response.Version == HttpVersion.Version30)
             {
                 result.Message = "Target supports HTTP/3 (QUIC).";
+                if (!response.IsSuccessStatusCode)
+                {
+                    result.Message += $" (Note: HTTP {response.StatusCode} received, but QUIC connection was successful)";
+                }
             }
             else
             {

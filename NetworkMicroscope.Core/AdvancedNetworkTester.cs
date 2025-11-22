@@ -44,6 +44,8 @@ public class AdvancedNetworkTester
         results.Add($"Tracing route to {_target} [{targetIp}] over a maximum of {maxHops} hops:");
 
         var stopwatch = new Stopwatch();
+        int consecutiveTimeouts = 0;
+        const int maxConsecutiveTimeouts = 5;
 
         for (int ttl = 1; ttl <= maxHops; ttl++)
         {
@@ -52,7 +54,8 @@ public class AdvancedNetworkTester
             
             try
             {
-                var reply = await ping.SendPingAsync(targetIp, 4000, buffer, options);
+                // Reduced timeout to 2 seconds to prevent hanging on blocked paths
+                var reply = await ping.SendPingAsync(targetIp, 2000, buffer, options);
                 stopwatch.Stop();
 
                 string hopInfo = $"{ttl}\t{stopwatch.ElapsedMilliseconds}ms\t{reply.Address}";
@@ -65,14 +68,23 @@ public class AdvancedNetworkTester
                 else if (reply.Status == IPStatus.TtlExpired)
                 {
                     results.Add(hopInfo);
+                    consecutiveTimeouts = 0; // Reset counter on success
                 }
                 else if (reply.Status == IPStatus.TimedOut)
                 {
                     results.Add($"{ttl}\t*\tRequest timed out.");
+                    consecutiveTimeouts++;
+                    
+                    if (consecutiveTimeouts >= maxConsecutiveTimeouts)
+                    {
+                        results.Add("Stopping traceroute after multiple consecutive timeouts (likely blocked).");
+                        break;
+                    }
                 }
                 else
                 {
                     results.Add($"{ttl}\t{stopwatch.ElapsedMilliseconds}ms\t{reply.Status}");
+                    consecutiveTimeouts = 0;
                 }
             }
             catch (Exception ex)
