@@ -24,7 +24,9 @@ Designed for network engineers, developers, and sysadmins who need to see *exact
 ### 🛡️ Protocol & Security
 *   **HTTP/3 (QUIC):** Verify if the target supports the latest web protocols.
 *   **TLS Analysis:** Inspect handshake details, cipher suites, and certificate chains.
-*   **JA4S Fingerprinting:** Calculate the JA4 server fingerprint to identify server types and potential threats.
+*   **JA4+ Fingerprinting:** 
+    *   **JA4S (TLS):** Server-side TLS fingerprinting (supports ALPN).
+    *   **JA4 (QUIC):** HTTP/3 fingerprinting over UDP.
 
 ### 🧠 Network Intelligence
 *   **ASN & GeoIP:** Identify the ISP, location, and Autonomous System of the target.
@@ -86,9 +88,35 @@ dotnet run --project NetworkMicroscope.CLI -- --target google.com --test tcpspra
 dotnet run --project NetworkMicroscope.CLI -- --target google.com --test tcpspray --probes 500
 ```
 
+**JA4 Fingerprinting (TLS & QUIC):**
+*Generate JA4S and JA4 (QUIC) fingerprints*
+```powershell
+dotnet run --project NetworkMicroscope.CLI -- --target google.com --test ja4
+```
+
 **Full Suite:**
 ```powershell
 dotnet run --project NetworkMicroscope.CLI -- --target google.com --test all
+```
+
+---
+
+## 📸 Example Output
+
+### JA4 Fingerprinting (TLS & QUIC)
+```text
+Target: facebook.com, Port: 443, Test: ja4
+--------------------------------------------------
+
+Running JA4 Fingerprinting...
+[PASS] JA4S (Server - Default): JA4S Calculated.
+    Fingerprint: t1300_1301_c35a6cc4faa0
+    Details: Ver: 13, Cipher: 1301, Exts: 2, Negotiated ALPN: None
+[PASS] JA4S (IPv4: 157.240.3.35): JA4S Calculated.
+    Fingerprint: t1300_1301_c35a6cc4faa0
+[PASS] JA4 (QUIC): JA4 (QUIC) Calculated.
+    Fingerprint: q13h3_1301_000000000000
+    Details: Ver: 13, Cipher: 1301, ALPN: h3, Exts: (Hidden)
 ```
 
 ---
